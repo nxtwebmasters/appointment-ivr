@@ -32,7 +32,7 @@ local doc_prompts = "/usr/share/freeswitch/sounds/prompts/doctors/"
 -- Sunday to Monday in format day-0 till day-6
 -- a-m and p-m
 local time_prompts = "/usr/share/freeswitch/sounds/en/us/callie/time/8000/"
-local prompts_folder = "/usr/share/freeswitch/sounds/prompts/"
+local prompts_folder = "/usr/share/freeswitch/sounds/prompts/english/"
 
 
 local department = nil;
@@ -152,10 +152,6 @@ function speak_date(date)
     local timePrompt = dayPrompt .. month_prompts .. "mon-" .. month .. ".wav"
     session:consoleLog("info", "DATE PROMPT: ".. timePrompt .."\n")
     return timePrompt
-end
-
-function welcome() 
-    session:streamFile(prompts_folder .. "welcome.mp3");
 end
 
 function menu_abandoned()
@@ -388,8 +384,32 @@ function main_menu()
 end
 
 function call_appointment_api()
+	local response_body = {}
+
+	local res, code, headers, status = https.request {
+		method = "GET",
+		url = "https://api-familycare.nxtwebmasters.com/api-server/doctor-schedule/department/doctor-schedules?slotDuration=6&timeFormat=24h",
+		source = ltn12.source.string(""),
+		headers = {
+			["content-type"] = "application/json",
+		},
+		sink = ltn12.sink.table(response_body)
+	}
+	freeswitch.consoleLog("INFO", "RESPONSE BODY = " .. tostring(res) .. "\n STATUS CODE = " .. tostring(code) .. "\n  STATUS BODY = " .. tostring(status) .."\n")
+	
+    response = json.encode(res)["data"]
+    if (status == 200) then
+        return select_department()
+    else
+        session:streamFile(prompts_folder .. "cannot_book.mp3");
+        return "MAIN"
+    end
+
     -- CALL HOSPITAL API TO GET DEPARTMENTS AND DOCTORS AND TIMES
- 
+end	
+
+function mock() 
+    
     local responseItem = {}
     responseItem["name"] = "Emergency"
     local doctors = {}
@@ -430,7 +450,7 @@ function call_appointment_api()
         session:streamFile(prompts_folder .. "cannot_book.mp3");
         return "MAIN"
     end
-end	
+end
 
 function cancel_appointment()
     local prompt_whole = prompts_folder .. "please_enter.mp3!" -- appointment id or press * to return to main menu
@@ -515,6 +535,5 @@ function nothing()
 end
 
 
-welcome()
 main_menu()
 
