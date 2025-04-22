@@ -3,7 +3,7 @@ package.path = "/usr/share/lua/5.2/?.lua;" .. package.path
 local https = require("ssl.https")
 local http = require("socket.http")
 local ltn12 = require "ltn12"
-local json = require "json"
+local json = require("dkjson")
 
 session:answer()
 local call_started_timestamp = os.time() * 1000;
@@ -25,10 +25,10 @@ freeswitch.consoleLog("INFO", "SERVICE IDENTIFIER : " .. destination_number)
 -- 0 to 20, then 30/40/50/60/70/80/90
 local digit_prompts = "/usr/share/freeswitch/sounds/en/us/callie/digits/8000/"
 -- January to December in format mon-00 till mon-12
-local month_prompts = "/usr/share/freeswitch/sounds/prompts/months/"
+local month_prompts = "/usr/share/freeswitch/sounds/prompts/months/months/"
 
-local dept_prompts = "/usr/share/freeswitch/sounds/prompts/departments/"
-local doc_prompts = "/usr/share/freeswitch/sounds/prompts/doctors/"
+local dept_prompts = "/usr/share/freeswitch/sounds/prompts/english/departments/"
+local doc_prompts = "/usr/share/freeswitch/sounds/prompts/english/doctors/"
 -- Sunday to Monday in format day-0 till day-6
 -- a-m and p-m
 local time_prompts = "/usr/share/freeswitch/sounds/en/us/callie/time/8000/"
@@ -164,7 +164,8 @@ function select_department()
     local prompt_whole = prompts_folder .. "please_enter.mp3!"
     local index = 1
     for _, department in ipairs(response) do
-        prompt_whole = prompt_whole .. digit_prompts .. tostring(index) .. ".wav!" .. prompts_folder .. "for.mp3!" .. dept_prompts .. department["name"] .. ".mp3!"
+        prompt_whole = prompt_whole .. digit_prompts .. tostring(index) .. ".wav!" .. prompts_folder .. "for.mp3!" .. dept_prompts .. department["alias"] .. ".mp3!"
+        index = index + 1
     end
     prompt_whole = prompt_whole .. prompts_folder .. "zero_prev_menu.mp3!" .. prompts_folder .. "or.mp3!" .. prompts_folder .. "star_main_menu.mp3!"
     local returnStr = "PREV"
@@ -202,7 +203,7 @@ function select_doctor(dept)
     local prompt_whole = prompts_folder .. "please_enter.mp3!"
     local index = 1
     for ind, doctor in ipairs(doctors) do
-        prompt_whole = prompt_whole .. digit_prompts .. tostring(index) .. ".wav!" .. prompts_folder .. "for.mp3!" .. doc_prompts .. doctor["name"]:gsub(" ", "_") .. ".mp3!"
+        prompt_whole = prompt_whole .. digit_prompts .. tostring(index) .. ".wav!" .. prompts_folder .. "for.mp3!" .. doc_prompts .. doctor["alias"]:gsub(" ", "_") .. ".mp3!"
         index = index + 1
     end
     prompt_whole = prompt_whole .. prompts_folder .. "zero_prev_menu.mp3!" .. prompts_folder .. "or.mp3!" .. prompts_folder .. "star_main_menu.mp3!"
@@ -395,10 +396,23 @@ function call_appointment_api()
 		},
 		sink = ltn12.sink.table(response_body)
 	}
-	freeswitch.consoleLog("INFO", "RESPONSE BODY = " .. tostring(res) .. "\n STATUS CODE = " .. tostring(code) .. "\n  STATUS BODY = " .. tostring(status) .."\n")
+	freeswitch.consoleLog("INFO", "RESPONSE BODY = " .. json.encode(response_body) .. "\n STATUS CODE = " .. tostring(code) .. "\n  STATUS BODY = " .. tostring(status) .."\n")
 	
-    response = json.encode(res)["data"]
-    if (status == 200) then
+
+    -- for x, y in ipairs(response_body) do
+    --     freeswitch.consoleLog("INFO", "KEY: " .. type(x) .. " VAL: " .. type(y))
+    -- end
+
+
+    response = json.decode(response_body[1])["data"]
+
+    -- local item2 = 
+    -- freeswitch.consoleLog("INFO", "AAAAAAAAAAA = " .. item2)
+
+    -- freeswitch.consoleLog("INFO", "BBBBBBBBBBB=  " .. )
+
+    -- freeswitch.consoleLog("INFO", "BBBBBBBBBB = " .. json.encode(response_body))
+    if (code == 200) then
         return select_department()
     else
         session:streamFile(prompts_folder .. "cannot_book.mp3");
@@ -536,4 +550,3 @@ end
 
 
 main_menu()
-
