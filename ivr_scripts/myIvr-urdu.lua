@@ -150,10 +150,6 @@ function speak_date(date)
     return timePrompt
 end
 
-function welcome() 
-    session:streamFile(prompts_folder .. "welcome.mp3");
-end
-
 function menu_abandoned()
     freeswitch.consoleLog("INFO", "--------------------MENU ABANDONED--------------------\n")
 	local call_hangup_timestamp = os.time() * 1000;
@@ -165,7 +161,7 @@ function select_department()
     local index = 1
 
     for _, department in ipairs(response) do
-        prompt_whole = prompt_whole .. dept_prompts .. department["name"] .. ".mp3!" .. prompts_folder .. "kay_liay.mp3!" .. digit_prompts .. tostring(index) .. ".mp3!" .. prompts_folder .. "dabaain.mp3!"
+        prompt_whole = prompt_whole .. dept_prompts .. department["alias"] .. ".mp3!" .. prompts_folder .. "kay_liay.mp3!" .. digit_prompts .. tostring(index) .. ".mp3!" .. prompts_folder .. "dabaain.mp3!"
         index = index + 1
     end
     prompt_whole = prompt_whole .. prompts_folder .. "zero_prev_star_main.mp3!"
@@ -327,7 +323,7 @@ function post_appointment_info()
     -- here post the doctor info to server and get response
     local mockStatus = 200
     local status = mockStatus
-    local prompt_whole = prompts_folder .. "your_appointment_with.mp3!" .. doc_prompts .. doctor["name"]:gsub(" ", "_") .. ".mp3!" .. prompts_folder .. "on.mp3!" .. speak_date(date["date"]) .. "!".. prompts_folder .. "at.mp3!" .. speak_time(slot["timeFrom"]) .. "!"
+    local prompt_whole = prompts_folder .. "your_appointment_with.mp3!" .. doc_prompts .. doctor["alias"]:gsub(" ", "_") .. ".mp3!" .. prompts_folder .. "kay_saath.mp3!" .. speak_date(date["date"]) .. "!" .. speak_time(slot["timeFrom"]) .. "!" .. prompts_folder .. "per.mp3!"
     if (status == 200) then
         session:streamFile(prompt_whole .. prompts_folder .. "has_been_confirmed.mp3")
         session:streamFile(prompts_folder .. "thank_for_time.mp3")
@@ -391,6 +387,44 @@ function main_menu()
 end
 
 function call_appointment_api()
+	local response_body = {}
+
+	local res, code, headers, status = https.request {
+		method = "GET",
+		url = "https://api-familycare.nxtwebmasters.com/api-server/doctor-schedule/department/doctor-schedules?slotDuration=6&timeFormat=24h",
+		source = ltn12.source.string(""),
+		headers = {
+			["content-type"] = "application/json",
+		},
+		sink = ltn12.sink.table(response_body)
+	}
+	freeswitch.consoleLog("INFO", "RESPONSE BODY = " .. json.encode(response_body) .. "\n STATUS CODE = " .. tostring(code) .. "\n  STATUS BODY = " .. tostring(status) .."\n")
+	
+
+    -- for x, y in ipairs(response_body) do
+    --     freeswitch.consoleLog("INFO", "KEY: " .. type(x) .. " VAL: " .. type(y))
+    -- end
+
+
+    response = json.decode(response_body[1])["data"]
+
+    -- local item2 = 
+    -- freeswitch.consoleLog("INFO", "AAAAAAAAAAA = " .. item2)
+
+    -- freeswitch.consoleLog("INFO", "BBBBBBBBBBB=  " .. )
+
+    -- freeswitch.consoleLog("INFO", "BBBBBBBBBB = " .. json.encode(response_body))
+    if (code == 200) then
+        return select_department()
+    else
+        session:streamFile(prompts_folder .. "cannot_book.mp3");
+        return "MAIN"
+    end
+
+    -- CALL HOSPITAL API TO GET DEPARTMENTS AND DOCTORS AND TIMES
+end	
+
+function mock()
     -- CALL HOSPITAL API TO GET DEPARTMENTS AND DOCTORS AND TIMES
  
     local responseItem = {}
@@ -518,6 +552,5 @@ function nothing()
 end
 
 
-welcome()
 main_menu()
 
