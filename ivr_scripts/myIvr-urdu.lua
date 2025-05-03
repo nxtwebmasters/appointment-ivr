@@ -153,7 +153,13 @@ end
 function menu_abandoned()
     freeswitch.consoleLog("INFO", "--------------------MENU ABANDONED--------------------\n")
 	local call_hangup_timestamp = os.time() * 1000;
-    freeswitch.consoleLog("INFO", "--------------------MENU ABANDONED AT " .. tostring(call_hangup_timestamp) "--------------------\n")
+    freeswitch.consoleLog("INFO", "--------------------MENU ABANDONED AT " .. call_hangup_timestamp "--------------------\n")
+end
+
+function menu_completed()
+    freeswitch.consoleLog("INFO", "--------------------MENU COMPLETED--------------------\n")
+	local call_hangup_timestamp = os.time() * 1000;
+    freeswitch.consoleLog("INFO", "--------------------MENU COMPLETED AT " .. call_hangup_timestamp "--------------------\n")
 end
 
 function select_department() 
@@ -281,6 +287,11 @@ function select_slot(day)
     session:streamFile(prompts_folder .. "doctor_times.mp3");
     local slots = day["slots"]
 
+    if (#slots < 1) then
+        slot = ""
+        returnStr = post_appointment_info()
+    end
+
     local prompt_whole = ""
     local index = 1
     
@@ -321,15 +332,51 @@ end
 
 function post_appointment_info() 
     -- here post the doctor info to server and get response
-    local mockStatus = 200
-    local status = mockStatus
+    -- local mockStatus = 200
+    -- local status = mockStatus
     local prompt_whole = prompts_folder .. "your_appointment_with.mp3!" .. doc_prompts .. doctor["alias"]:gsub(" ", "_") .. ".mp3!" .. prompts_folder .. "kay_saath.mp3!" .. speak_date(date["date"]) .. "!" .. speak_time(slot["timeFrom"]) .. "!" .. prompts_folder .. "per.mp3!"
-    if (status == 200) then
+    
+    local req_body = {
+        type = "ivr_appointment",
+        status = "pending",
+        created_by = "appointment_ivr",
+        department_alias = department["alias"],
+        doctor_alias = doctor["alias"],
+        date = date["date"],
+        slot = json.encode(slot):gsub("\\", ""),
+        patient_ani = session:getVariable("caller_id_number")
+    }
+    
+    
+    local req_body1 = json.encode(req_body)
+	freeswitch.consoleLog("INFO", "POSTING APPOINTMENT INFO :" .. req_body1 .. "\n")
+    local response_body = {}
+
+    local res, code, headers, status = https.request {
+        method = "POST",
+        url = "https://api-familycare.nxtwebmasters.com/api-server/appointment/ivr-appointment/schedule",
+        source = ltn12.source.string(req_body1),
+        headers = {
+            ["content-type"] = "application/json",
+            ["Content-Length"] = string.len(req_body1)
+        },
+        sink = ltn12.sink.table(response_body)
+    }
+
+	freeswitch.consoleLog("INFO", "RESPONSE BODY = " .. tostring(res) .. "\n STATUS CODE = " .. tostring(code) .. "\n  STATUS BODY = " .. tostring(status) .."\n")
+    
+
+    freeswitch.consoleLog("INFO", "RESPONSE:  "  .. json.encode(response_body))
+    
+    if (code == 200 or code == 201 or code == 202) then
         session:streamFile(prompt_whole .. prompts_folder .. "has_been_confirmed.mp3")
+        session:streamFile(prompts_folder .. "receive_appointment_id.mp3")
         session:streamFile(prompts_folder .. "thank_for_time.mp3")
         -- your appointment with Doctor <doctor name> on <date> at <slot start time> has been confirmed with id number <id>
         -- thank you for your time
-        return "MAIN"
+        session:setHangupHook("menu_completed");
+        session:hangup()
+        return "END"
     else
         session:streamFile(prompt_whole .. prompts_folder .. "could_not_confirm.mp3")
         -- your appointment with Doctor <doctor name> on <date> at <slot start time> could not be confirmed at this time. Please try again later
@@ -337,30 +384,7 @@ function post_appointment_info()
     end
 end
 
-function appointment_confirmed(activities)
-	freeswitch.consoleLog("INFO", "--------------------MENU COMPLETED--------------------\n")
-	local encodedInfo = json.encode(appointmentInfo)
-	local call_transfer_timestamp = os.time() * 1000;
 
-	local jsonstring =  '{ "id": "15242"}'
-	local req_body2 = json.decode(jsonstring)
-	local req_body1 =  json.encode(req_body2)
-	local response_body = {}
-    freeswitch.consoleLog("INFO", "POSTING APPOINTMENT INFO " .. "\n")
-
-	local res, code, headers, status = https.request {
-		method = "POST",
-		url = "hospital-api",
-		source = ltn12.source.string(req_body1),
-		headers = {
-			["content-type"] = "application/json",
-			["Content-Length"] = string.len(req_body1)
-		},
-		sink = ltn12.sink.table(response_body)
-	}
-	freeswitch.consoleLog("INFO", "RESPONSE BODY = " .. tostring(res) .. "\n STATUS CODE = " .. tostring(code) .. "\n  STATUS BODY = " .. tostring(status) .."\n")
-	freeswitch.consoleLog("INFO", "--------------------MENU COMPLETED--------------------\n")
-end
 
 function main_menu()
 
@@ -391,37 +415,32 @@ function call_appointment_api()
 
 	local res, code, headers, status = https.request {
 		method = "GET",
-		url = "https://api-familycare.nxtwebmasters.com/api-server/doctor-schedule/department/doctor-schedules?slotDuration=6&timeFormat=24h",
+		url = "https://api-familycare.nxtwebmasters.com/api-server/doctor-schedule/department/doctor-schedules?slotDuration=30&timeFormat=24h",
 		source = ltn12.source.string(""),
 		headers = {
 			["content-type"] = "application/json",
 		},
 		sink = ltn12.sink.table(response_body)
 	}
-	freeswitch.consoleLog("INFO", "RESPONSE BODY = " .. json.encode(response_body) .. "\n STATUS CODE = " .. tostring(code) .. "\n  STATUS BODY = " .. tostring(status) .."\n")
-	
 
-    -- for x, y in ipairs(response_body) do
-    --     freeswitch.consoleLog("INFO", "KEY: " .. type(x) .. " VAL: " .. type(y))
-    -- end
+    
+    local fixedResponse = ""
 
+    for a, b in ipairs(response_body) do
+       fixedResponse  = fixedResponse .. b
+    end
 
-    response = json.decode(response_body[1])["data"]
+	freeswitch.consoleLog("INFO", "RESPONSE BODY = " .. fixedResponse .. "\n STATUS CODE = " .. tostring(code) .. "\n  STATUS BODY = " .. tostring(status) .."\n")
 
-    -- local item2 = 
-    -- freeswitch.consoleLog("INFO", "AAAAAAAAAAA = " .. item2)
+    response = json.decode(fixedResponse)["data"]
 
-    -- freeswitch.consoleLog("INFO", "BBBBBBBBBBB=  " .. )
-
-    -- freeswitch.consoleLog("INFO", "BBBBBBBBBB = " .. json.encode(response_body))
-    if (code == 200) then
+    if (code == 200 or code == 201 or code == 202) then
         return select_department()
     else
         session:streamFile(prompts_folder .. "cannot_book.mp3");
         return "MAIN"
     end
 
-    -- CALL HOSPITAL API TO GET DEPARTMENTS AND DOCTORS AND TIMES
 end	
 
 function mock()
@@ -537,20 +556,19 @@ function appointment_status()
 end	
 
 function nothing()
-    freeswitch.consoleLog("INFO", "REQUEST AGENT OPTION SELECTED\n")
-	session:setVariable("session_in_hangup_hook", "false");
-	session:sleep(1000);
-	session:setVariable("session_in_hangup_hook", "true");
-	session:setHangupHook("session_transfer");
-	local json_activites = json.encode(activities)
-	if (not session:ready()) then
-        menu_abandoned()
-    else
-        menu_completed(activities)
-    end
-	freeswitch.consoleLog("INFO", "IVR JOURNEY : " ..json_activites )	
+    -- freeswitch.consoleLog("INFO", "REQUEST AGENT OPTION SELECTED\n")
+	-- session:setVariable("session_in_hangup_hook", "false");
+	-- session:sleep(1000);
+	-- session:setVariable("session_in_hangup_hook", "true");
+	-- session:setHangupHook("session_transfer");
+	-- local json_activites = json.encode(activities)
+	-- if (not session:ready()) then
+    --     menu_abandoned()
+    -- else
+    --     menu_completed(activities)
+    -- end
+	-- freeswitch.consoleLog("INFO", "IVR JOURNEY : " ..json_activites )	
 end
 
 
 main_menu()
-
