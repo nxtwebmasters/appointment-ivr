@@ -318,8 +318,35 @@ function select_slot(day)
                 else
                     freeswitch.consoleLog("NOTICE", "SELECTED  " .. json.encode(slots[tonumber(digits)]))
                     slot = slots[tonumber(digits)]
-                    returnStr = post_appointment_info()
+                    returnStr = recap()
                 end
+            elseif (digits == nil or digits == '') then
+                --do nothing
+            else
+                session:streamFile(prompts_folder .. "invalid_entry.mp3");
+            end
+            session:sleep(1000);
+    end
+    return returnStr;
+end
+
+function recap()
+
+    local prompt_whole = prompts_folder .. "your_appointment_with.mp3!" .. doc_prompts .. doctor["alias"]:gsub(" ", "_") .. ".mp3!" .. prompts_folder .. "kay_saath.mp3!" .. speak_date(date["date"]) .. "!" .. speak_time(slot["timeFrom"]) .. "!" .. prompts_folder .. "per_kee_ja_rahi_hai.mp3!" .. prompts_folder .. "confirm_by_one.mp3!" .. prompts_folder .. "zero_prev_star_main.mp3!"
+    
+    local returnStr = "PREV"
+    while (session:ready() and returnStr == "PREV") do
+        returnStr = "PREV"
+        
+            local digits = session:playAndGetDigits(1, 1, 1, 8000, "#", prompt_whole, prompts_folder .. "invalid_entry.mp3", "")
+            session:consoleLog("info", "DIGIT PRESSED: ".. digits .."\n")
+            if (digits == "0") then
+                return "PREV"
+                -- session:streamFile(prompts_folder .. "invalid_entry.mp3");
+            elseif (digits == "*") then
+                return "MAIN"
+            elseif (digits == "1") then
+                returnStr = post_appointment_info()
             elseif (digits == nil or digits == '') then
                 --do nothing
             else
