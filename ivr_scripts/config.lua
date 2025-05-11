@@ -1,0 +1,5 @@
+return {
+    createAppointmentApi = "",
+    getAllAppointmentsApi = "",
+    appointmentStatusApi = ""
+}
