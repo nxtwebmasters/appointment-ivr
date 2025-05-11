@@ -1,5 +1,5 @@
 return {
     createAppointmentApi = "",
-    getAllAppointmentsApi = "",
+    getAllSchedulesApi = "",
     appointmentStatusApi = ""
 }
