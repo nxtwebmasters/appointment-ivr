@@ -4,6 +4,7 @@ local https = require("ssl.https")
 local http = require("socket.http")
 local ltn12 = require "ltn12"
 local json = require "json"
+local config = require "config"
 
 session:answer()
 local call_started_timestamp = os.time() * 1000;
@@ -381,7 +382,7 @@ function post_appointment_info()
 
     local res, code, headers, status = https.request {
         method = "POST",
-        url = "https://api-familycare.nxtwebmasters.com/api-server/appointment/ivr-appointment/schedule",
+        url = config.createAppointmentApi,
         source = ltn12.source.string(req_body1),
         headers = {
             ["content-type"] = "application/json",
@@ -410,8 +411,6 @@ function post_appointment_info()
         return "MAIN"
     end
 end
-
-
 
 function main_menu()
 
@@ -442,7 +441,7 @@ function call_appointment_api()
 
 	local res, code, headers, status = https.request {
 		method = "GET",
-		url = "https://api-familycare.nxtwebmasters.com/api-server/doctor-schedule/department/doctor-schedules?slotDuration=30&timeFormat=24h",
+		url = config.getAllAppointmentsApi,
 		source = ltn12.source.string(""),
 		headers = {
 			["content-type"] = "application/json",
@@ -552,7 +551,6 @@ function cancel_appointment()
 end	
 
 function appointment_status()
-
     local returnStr = "PREV"
     while (session:ready() and returnStr == "PREV") do
         returnStr = "PREV"
@@ -562,14 +560,26 @@ function appointment_status()
             if (digits == "*") then
                 return "MAIN"
             elseif (#digits > 7 and #digits < 15) then
+
+                local response_body = {}
+
+                local res, code, headers, status = https.request {
+                    method = "GET",
+                    url = config.appointmentStatusApi .. tostring(digits) .. "-APT",
+                    source = ltn12.source.string(""),
+                    headers = {
+                        ["content-type"] = "application/json",
+                    },
+                    sink = ltn12.sink.table(response_body)
+                }
+
+                freeswitch.consoleLog("INFO", "RESPONSE BODY = " .. json.encode(response_body) .. "\n STATUS CODE = " .. tostring(code) .. "\n  STATUS BODY = " .. tostring(status) .."\n")
+
                 -- CALL HOSPITAL API WITH APPOINTMENT ID
-                if (responseStatus == 200) then
-                    speak_date(date)
-                    speak_time(timefrom)
-                    speak_time(timeto)
+                if (code == 200 or code == 201 or code == 202) then
+                    session:streamFile(prompts_folder .. "appointment_status.mp3!" .. prompts_folder .. response_body["data"]["appointment_status"] .. ".mp3!" .. prompts_folder .. "hai.mp3");
                 else
                     session:streamFile(prompts_folder .. "appointment_not_found.mp3");
-                    -- APPOINTMENT CANNOT BE CANCELLED OR NOT FOUND
                     return "MAIN"
                 end
             elseif (digits == nil or digits == '') then
