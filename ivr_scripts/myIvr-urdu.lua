@@ -441,7 +441,7 @@ function call_appointment_api()
 
 	local res, code, headers, status = https.request {
 		method = "GET",
-		url = config.getAllAppointmentsApi,
+		url = config.getAllSchedulesApi,
 		source = ltn12.source.string(""),
 		headers = {
 			["content-type"] = "application/json",
