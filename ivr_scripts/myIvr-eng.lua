@@ -3,7 +3,8 @@ package.path = "/usr/share/lua/5.2/?.lua;" .. package.path
 local https = require("ssl.https")
 local http = require("socket.http")
 local ltn12 = require "ltn12"
-local json = require("dkjson")
+local json = require("json")
+local config = require "config"
 
 session:answer()
 local call_started_timestamp = os.time() * 1000;
@@ -23,15 +24,15 @@ local destination_number = session:getVariable("destination_number");
 freeswitch.consoleLog("INFO", "SERVICE IDENTIFIER : " .. destination_number)
 
 -- 0 to 20, then 30/40/50/60/70/80/90
-local digit_prompts = "/usr/share/freeswitch/sounds/en/us/callie/digits/8000/"
+local digit_prompts = "/usr/share/freeswitch/sounds/prompts/english/digits/"
 -- January to December in format mon-00 till mon-12
-local month_prompts = "/usr/share/freeswitch/sounds/prompts/months/months/"
+local month_prompts = "/usr/share/freeswitch/sounds/prompts/english/months/"
 
 local dept_prompts = "/usr/share/freeswitch/sounds/prompts/english/departments/"
 local doc_prompts = "/usr/share/freeswitch/sounds/prompts/english/doctors/"
 -- Sunday to Monday in format day-0 till day-6
 -- a-m and p-m
-local time_prompts = "/usr/share/freeswitch/sounds/en/us/callie/time/8000/"
+-- local time_prompts = "/usr/share/freeswitch/sounds/en/us/callie/time/8000/"
 local prompts_folder = "/usr/share/freeswitch/sounds/prompts/english/"
 
 
@@ -90,12 +91,12 @@ end
 function over_twenty_prompt(digits)
     local decade = string.sub(digits, 1,1) .. "0"
     local unit = string.sub(digits, 2,2)
-    local wholePrompt = digit_prompts .. decade .. ".wav!"
+    local wholePrompt = digit_prompts .. decade .. ".mp3!"
 
     freeswitch.consoleLog("INFO", "--" .. unit .. "--")
 
     if (unit ~= "0") then
-        wholePrompt = wholePrompt .. digit_prompts .. unit .. ".wav!"
+        wholePrompt = wholePrompt .. digit_prompts .. unit .. ".mp3!"
     end
 
     return wholePrompt
@@ -103,14 +104,14 @@ end
 
 function speak_time(time) 
     -- local time = "00:16"
-    local ampm = "a-m"
+    local ampm = "am"
     local hours = string.sub(time, 1,2)
     local mins = string.sub(time, 4,5)
 
     local hoursNum = tonumber(hours)
     local minsNum = tonumber(mins)
     if (hoursNum > 11) then
-        ampm = "p-m"
+        ampm = "pm"
     end
 
     if (hoursNum < 1) then
@@ -124,13 +125,11 @@ function speak_time(time)
     local minsPrompt = ""
     if (minsNum == 0) then
         minsPrompt = ""
-    elseif (minsNum < 21) then
-        minsPrompt = digit_prompts .. tostring(minsNum) .. ".wav!"
     else
-        minsPrompt = over_twenty_prompt(mins)
+        minsPrompt = digit_prompts .. tostring(minsNum) .. ".mp3!"
     end
 
-    local timePrompt = digit_prompts .. tostring(hoursNum) .. ".wav!" .. minsPrompt .. time_prompts .. ampm .. ".wav"
+    local timePrompt = digit_prompts .. tostring(hoursNum) .. ".mp3!" .. minsPrompt .. prompts_folder .. ampm .. ".mp3"
     return timePrompt
 end
 
@@ -141,15 +140,13 @@ function speak_date(date)
     local yearUnit = string.sub(date, 4,4)
     local month = string.sub(date, 6,7)
     local day = tonumber(string.sub(date, 9,10))
+    local date_digit_prompts = "/usr/share/freeswitch/sounds/prompts/english/date_digits/"
 
     local dayPrompt = ""
-    if (day < 21) then
-        dayPrompt = digit_prompts .. tostring(day) .. ".wav!"
-    else
-        dayPrompt = over_twenty_prompt(tostring(day))
-    end
+    dayPrompt = date_digit_prompts .. tostring(day) .. ".mp3!"
+    
 
-    local timePrompt = dayPrompt .. month_prompts .. "mon-" .. month .. ".wav"
+    local timePrompt = dayPrompt .. month_prompts .. "mon-" .. month .. ".mp3"
     session:consoleLog("info", "DATE PROMPT: ".. timePrompt .."\n")
     return timePrompt
 end
@@ -160,14 +157,21 @@ function menu_abandoned()
     freeswitch.consoleLog("INFO", "--------------------MENU ABANDONED AT " .. tostring(call_hangup_timestamp) "--------------------\n")
 end
 
+function menu_completed()
+    freeswitch.consoleLog("INFO", "--------------------MENU COMPLETED--------------------\n")
+	local call_hangup_timestamp = os.time() * 1000;
+    freeswitch.consoleLog("INFO", "--------------------MENU COMPLETED AT " .. call_hangup_timestamp "--------------------\n")
+end
+
 function select_department() 
     local prompt_whole = prompts_folder .. "please_enter.mp3!"
     local index = 1
     for _, department in ipairs(response) do
-        prompt_whole = prompt_whole .. digit_prompts .. tostring(index) .. ".wav!" .. prompts_folder .. "for.mp3!" .. dept_prompts .. department["alias"] .. ".mp3!"
+        prompt_whole = prompt_whole .. digit_prompts .. tostring(index) .. ".mp3!" .. prompts_folder .. "for.mp3!" .. dept_prompts .. department["alias"] .. ".mp3!"
         index = index + 1
     end
-    prompt_whole = prompt_whole .. prompts_folder .. "zero_prev_menu.mp3!" .. prompts_folder .. "or.mp3!" .. prompts_folder .. "star_main_menu.mp3!"
+
+    prompt_whole = prompt_whole .. prompts_folder .. "zero_prev_star_main.mp3!"
     local returnStr = "PREV"
     while (session:ready() and returnStr == "PREV") do
         returnStr = "PREV"
@@ -203,10 +207,10 @@ function select_doctor(dept)
     local prompt_whole = prompts_folder .. "please_enter.mp3!"
     local index = 1
     for ind, doctor in ipairs(doctors) do
-        prompt_whole = prompt_whole .. digit_prompts .. tostring(index) .. ".wav!" .. prompts_folder .. "for.mp3!" .. doc_prompts .. doctor["alias"]:gsub(" ", "_") .. ".mp3!"
+        prompt_whole = prompt_whole .. digit_prompts .. tostring(index) .. ".mp3!" .. prompts_folder .. "for.mp3!" .. doc_prompts .. doctor["alias"]:gsub(" ", "_") .. ".mp3!"
         index = index + 1
     end
-    prompt_whole = prompt_whole .. prompts_folder .. "zero_prev_menu.mp3!" .. prompts_folder .. "or.mp3!" .. prompts_folder .. "star_main_menu.mp3!"
+    prompt_whole = prompt_whole .. prompts_folder .. "zero_prev_star_main.mp3!" 
 
     local returnStr = "PREV"
     while (session:ready() and returnStr == "PREV") do
@@ -242,10 +246,10 @@ function select_day(timings)
     local prompt_whole = prompts_folder .. "please_enter.mp3!"
     local index = 1
     for _, timing in ipairs(timings) do
-        prompt_whole = prompt_whole .. digit_prompts .. tostring(index) .. ".wav!" .. prompts_folder .. "for.mp3!" .. speak_date(timing["date"]) .. "!"
+        prompt_whole = prompt_whole .. digit_prompts .. tostring(index) .. ".mp3!" .. prompts_folder .. "for.mp3!" .. speak_date(timing["date"]) .. "!"
         index = index + 1
     end
-    prompt_whole = prompt_whole .. prompts_folder .. "zero_prev_menu.mp3!" .. prompts_folder .. "or.mp3!" .. prompts_folder .. "star_main_menu.mp3!"
+    prompt_whole = prompt_whole .. prompts_folder .. "zero_prev_star_main.mp3!"
 
     local returnStr = "PREV"
     while (session:ready() and returnStr == "PREV") do
@@ -277,16 +281,22 @@ function select_day(timings)
 end
 
 function select_slot(day)
-    session:streamFile(prompts_folder .. "doctor_times.mp3");
-    local slots = day["slots"]
 
+    local slots = day["slots"]
+    if (#slots < 1) then
+        slot = ""
+        returnStr = post_appointment_info()
+    end
+    session:streamFile(prompts_folder .. "doctor_times.mp3");
     local prompt_whole = prompts_folder .. "please_enter.mp3!"
     local index = 1
     for ind, slot in ipairs(slots) do
-        prompt_whole = prompt_whole .. digit_prompts .. tostring(index) .. ".wav!" .. prompts_folder .. "for.mp3!" .. speak_time(slot["timeFrom"]) .. "!" .. prompts_folder .. "to.mp3!" .. speak_time(slot["timeTo"]) .. "!"
+        prompt_whole = prompt_whole .. digit_prompts .. tostring(index) .. ".mp3!" .. prompts_folder .. "for.mp3!" .. speak_time(slot["timeFrom"]) .. "!" 
+    
+        -- .. prompts_folder .. "to.mp3!" .. speak_time(slot["timeTo"]) .. "!"
         index = index + 1
     end
-    prompt_whole = prompt_whole .. prompts_folder .. "zero_prev_menu.mp3!" .. prompts_folder .. "or.mp3!" .. prompts_folder .. "star_main_menu.mp3!"
+    prompt_whole = prompt_whole .. prompts_folder .. "zero_prev_star_main.mp3!"
 
     local returnStr = "PREV"
     while (session:ready() and returnStr == "PREV") do
@@ -305,8 +315,35 @@ function select_slot(day)
                 else
                     freeswitch.consoleLog("NOTICE", "SELECTED  " .. json.encode(slots[tonumber(digits)]))
                     slot = slots[tonumber(digits)]
-                    returnStr = post_appointment_info()
+                    returnStr = recap()
                 end
+            elseif (digits == nil or digits == '') then
+                --do nothing
+            else
+                session:streamFile(prompts_folder .. "invalid_entry.mp3");
+            end
+            session:sleep(1000);
+    end
+    return returnStr;
+end
+
+function recap()
+
+    local prompt_whole = prompts_folder .. "you_have_requested_an_appointment_with.mp3!" .. doc_prompts .. doctor["alias"]:gsub(" ", "_") .. ".mp3!" .. prompts_folder .. "on.mp3!" .. speak_date(date["date"]) .. "!" .. prompts_folder .."at.mp3!" .. speak_time(slot["timeFrom"]) .. "!" .. prompts_folder .. "press_one_to_confirm_this_appointment.mp3!" .. prompts_folder .. "zero_prev_star_main.mp3!"
+    
+    local returnStr = "PREV"
+    while (session:ready() and returnStr == "PREV") do
+        returnStr = "PREV"
+        
+            local digits = session:playAndGetDigits(1, 1, 1, 8000, "#", prompt_whole, prompts_folder .. "invalid_entry.mp3", "")
+            session:consoleLog("info", "DIGIT PRESSED: ".. digits .."\n")
+            if (digits == "0") then
+                return "PREV"
+                -- session:streamFile(prompts_folder .. "invalid_entry.mp3");
+            elseif (digits == "*") then
+                return "MAIN"
+            elseif (digits == "1") then
+                returnStr = post_appointment_info()
             elseif (digits == nil or digits == '') then
                 --do nothing
             else
@@ -319,15 +356,51 @@ end
 
 function post_appointment_info() 
     -- here post the doctor info to server and get response
-    local mockStatus = 200
-    local status = mockStatus
-    local prompt_whole = prompts_folder .. "your_appointment_with.mp3!" .. doc_prompts .. doctor["name"]:gsub(" ", "_") .. ".mp3!" .. prompts_folder .. "on.mp3!" .. speak_date(date["date"]) .. "!".. prompts_folder .. "at.mp3!" .. speak_time(slot["timeFrom"]) .. "!"
-    if (status == 200) then
+    -- local mockStatus = 200
+    -- local status = mockStatus
+    local prompt_whole = prompts_folder .. "your_appointment_with.mp3!" .. doc_prompts .. doctor["alias"]:gsub(" ", "_") .. ".mp3!" .. prompts_folder .. "on.mp3!" .. speak_date(date["date"]) .. "!".. prompts_folder .. "at.mp3!" .. speak_time(slot["timeFrom"]) .. "!"
+
+    local req_body = {
+        type = "ivr_appointment",
+        status = "pending",
+        created_by = "appointment_ivr",
+        department_alias = department["alias"],
+        doctor_alias = doctor["alias"],
+        date = date["date"],
+        slot = json.encode(slot):gsub("\\", ""),
+        patient_ani = session:getVariable("caller_id_number")
+    }
+    
+    
+    local req_body1 = json.encode(req_body)
+	freeswitch.consoleLog("INFO", "POSTING APPOINTMENT INFO :" .. req_body1 .. "\n")
+    local response_body = {}
+
+    local res, code, headers, status = https.request {
+        method = "POST",
+        url = config.createAppointmentApi,
+        source = ltn12.source.string(req_body1),
+        headers = {
+            ["content-type"] = "application/json",
+            ["Content-Length"] = string.len(req_body1)
+        },
+        sink = ltn12.sink.table(response_body)
+    }
+
+	freeswitch.consoleLog("INFO", "RESPONSE BODY = " .. tostring(res) .. "\n STATUS CODE = " .. tostring(code) .. "\n  STATUS BODY = " .. tostring(status) .."\n")
+    
+
+    freeswitch.consoleLog("INFO", "RESPONSE:  "  .. json.encode(response_body))
+    
+    if (code == 200 or code == 201 or code == 202) then
         session:streamFile(prompt_whole .. prompts_folder .. "has_been_confirmed.mp3")
+        session:streamFile(prompts_folder .. "receive_appointment_id.mp3")
         session:streamFile(prompts_folder .. "thank_for_time.mp3")
         -- your appointment with Doctor <doctor name> on <date> at <slot start time> has been confirmed with id number <id>
         -- thank you for your time
-        return "MAIN"
+        session:setHangupHook("menu_completed");
+        session:hangup()
+        return "END"
     else
         session:streamFile(prompt_whole .. prompts_folder .. "could_not_confirm.mp3")
         -- your appointment with Doctor <doctor name> on <date> at <slot start time> could not be confirmed at this time. Please try again later
@@ -335,30 +408,6 @@ function post_appointment_info()
     end
 end
 
-function appointment_confirmed(activities)
-	freeswitch.consoleLog("INFO", "--------------------MENU COMPLETED--------------------\n")
-	local encodedInfo = json.encode(appointmentInfo)
-	local call_transfer_timestamp = os.time() * 1000;
-
-	local jsonstring =  '{ "id": "15242"}'
-	local req_body2 = json.decode(jsonstring)
-	local req_body1 =  json.encode(req_body2)
-	local response_body = {}
-    freeswitch.consoleLog("INFO", "POSTING APPOINTMENT INFO " .. "\n")
-
-	local res, code, headers, status = https.request {
-		method = "POST",
-		url = "hospital-api",
-		source = ltn12.source.string(req_body1),
-		headers = {
-			["content-type"] = "application/json",
-			["Content-Length"] = string.len(req_body1)
-		},
-		sink = ltn12.sink.table(response_body)
-	}
-	freeswitch.consoleLog("INFO", "RESPONSE BODY = " .. tostring(res) .. "\n STATUS CODE = " .. tostring(code) .. "\n  STATUS BODY = " .. tostring(status) .."\n")
-	freeswitch.consoleLog("INFO", "--------------------MENU COMPLETED--------------------\n")
-end
 
 function main_menu()
 
@@ -389,7 +438,7 @@ function call_appointment_api()
 
 	local res, code, headers, status = https.request {
 		method = "GET",
-		url = "https://api-familycare.nxtwebmasters.com/api-server/doctor-schedule/department/doctor-schedules?slotDuration=6&timeFormat=24h",
+		url = config.getAllSchedulesApi,
 		source = ltn12.source.string(""),
 		headers = {
 			["content-type"] = "application/json",
@@ -399,20 +448,17 @@ function call_appointment_api()
 	freeswitch.consoleLog("INFO", "RESPONSE BODY = " .. json.encode(response_body) .. "\n STATUS CODE = " .. tostring(code) .. "\n  STATUS BODY = " .. tostring(status) .."\n")
 	
 
-    -- for x, y in ipairs(response_body) do
-    --     freeswitch.consoleLog("INFO", "KEY: " .. type(x) .. " VAL: " .. type(y))
-    -- end
+    local fixedResponse = ""
 
+    for a, b in ipairs(response_body) do
+       fixedResponse  = fixedResponse .. b
+    end
 
-    response = json.decode(response_body[1])["data"]
+	freeswitch.consoleLog("INFO", "RESPONSE BODY = " .. fixedResponse .. "\n STATUS CODE = " .. tostring(code) .. "\n  STATUS BODY = " .. tostring(status) .."\n")
 
-    -- local item2 = 
-    -- freeswitch.consoleLog("INFO", "AAAAAAAAAAA = " .. item2)
+    response = json.decode(fixedResponse)["data"]
 
-    -- freeswitch.consoleLog("INFO", "BBBBBBBBBBB=  " .. )
-
-    -- freeswitch.consoleLog("INFO", "BBBBBBBBBB = " .. json.encode(response_body))
-    if (code == 200) then
+    if (code == 200 or code == 201 or code == 202) then
         return select_department()
     else
         session:streamFile(prompts_folder .. "cannot_book.mp3");
@@ -514,10 +560,23 @@ function appointment_status()
                 return "MAIN"
             elseif (#digits > 7 and #digits < 15) then
                 -- CALL HOSPITAL API WITH APPOINTMENT ID
-                if (responseStatus == 200) then
-                    speak_date(date)
-                    speak_time(timefrom)
-                    speak_time(timeto)
+                local response_body = {}
+
+                local res, code, headers, status = https.request {
+                    method = "GET",
+                    url = config.appointmentStatusApi .. tostring(digits) .. "-APT",
+                    source = ltn12.source.string(""),
+                    headers = {
+                        ["content-type"] = "application/json",
+                    },
+                    sink = ltn12.sink.table(response_body)
+                }
+
+                freeswitch.consoleLog("INFO", "RESPONSE BODY = " .. json.encode(response_body) .. "\n STATUS CODE = " .. tostring(code) .. "\n  STATUS BODY = " .. tostring(status) .."\n")
+
+                -- CALL HOSPITAL API WITH APPOINTMENT ID
+                if (code == 200 or code == 201 or code == 202) then
+                    session:streamFile(prompts_folder .. "your_appointment_status_is.mp3!" .. prompts_folder .. response_body["data"]["appointment_status"] .. ".mp3!");
                 else
                     session:streamFile(prompts_folder .. "appointment_not_found.mp3");
                     -- APPOINTMENT CANNOT BE CANCELLED OR NOT FOUND
@@ -533,20 +592,21 @@ function appointment_status()
     return nil
 end	
 
-function nothing()
-    freeswitch.consoleLog("INFO", "REQUEST AGENT OPTION SELECTED\n")
-	session:setVariable("session_in_hangup_hook", "false");
-	session:sleep(1000);
-	session:setVariable("session_in_hangup_hook", "true");
-	session:setHangupHook("session_transfer");
-	local json_activites = json.encode(activities)
-	if (not session:ready()) then
-        menu_abandoned()
-    else
-        menu_completed(activities)
-    end
-	freeswitch.consoleLog("INFO", "IVR JOURNEY : " ..json_activites )	
-end
+-- function nothing()
+--     freeswitch.consoleLog("INFO", "REQUEST AGENT OPTION SELECTED\n")
+-- 	session:setVariable("session_in_hangup_hook", "false");
+-- 	session:sleep(1000);
+-- 	session:setVariable("session_in_hangup_hook", "true");
+-- 	session:setHangupHook("session_transfer");
+-- 	local json_activites = json.encode(activities)
+-- 	if (not session:ready()) then
+--         menu_abandoned()
+--     else
+--         menu_completed(activities)
+--     end
+-- 	freeswitch.consoleLog("INFO", "IVR JOURNEY : " ..json_activites )	
+-- end
 
-
+session:streamFile(prompts_folder .. "welcome.mp3!")
 main_menu()
+
