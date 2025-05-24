@@ -554,7 +554,7 @@ function appointment_status()
     while (session:ready() and returnStr == "PREV") do
         returnStr = "PREV"
         
-            local digits = session:playAndGetDigits(1, 14, 1, 8000, "#", prompts_folder .. "enter_appointment_id_or_return.mp3", prompts_folder .. "invalid_entry.mp3", "")
+            local digits = session:playAndGetDigits(1, 14, 1, 5000, "#", prompts_folder .. "enter_appointment_id_or_return.mp3", prompts_folder .. "invalid_entry.mp3", "")
             session:consoleLog("info", "DIGIT PRESSED: ".. digits .."\n")
             if (digits == "*") then
                 return "MAIN"
@@ -572,15 +572,15 @@ function appointment_status()
                     sink = ltn12.sink.table(response_body)
                 }
 
-                freeswitch.consoleLog("INFO", "RESPONSE BODY = " .. json.encode(response_body) .. "\n STATUS CODE = " .. tostring(code) .. "\n  STATUS BODY = " .. tostring(status) .."\n")
+                freeswitch.consoleLog("INFO", "RESPONSE BODY = " .. response_body[1] .. "\n STATUS CODE = " .. tostring(code) .. "\n  STATUS BODY = " .. tostring(status) .."\n")
 
                 -- CALL HOSPITAL API WITH APPOINTMENT ID
                 if (code == 200 or code == 201 or code == 202) then
-                    session:streamFile(prompts_folder .. "your_appointment_status_is.mp3!" .. prompts_folder .. response_body["data"]["appointment_status"] .. ".mp3!");
+                    session:streamFile(prompts_folder .. "your_appointment_status_is.mp3!" .. prompts_folder .. json.decode(response_body[1])["data"]["appointment_status"] .. ".mp3!");
+                    return "MAIN"
                 else
                     session:streamFile(prompts_folder .. "appointment_not_found.mp3");
                     -- APPOINTMENT CANNOT BE CANCELLED OR NOT FOUND
-                    return "MAIN"
                 end
             elseif (digits == nil or digits == '') then
                 --do nothing
@@ -609,4 +609,3 @@ end
 
 session:streamFile(prompts_folder .. "welcome.mp3!")
 main_menu()
-
